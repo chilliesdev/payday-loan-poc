@@ -16,7 +16,7 @@ export class AuditService {
       data: {
         actor: params.actor,
         action: params.action,
-        metadata: params.metadata,
+        metadata: params.metadata as any,
         companyId: params.companyId ?? null,
         userId: params.userId ?? null
       }

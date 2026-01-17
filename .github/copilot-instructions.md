@@ -1,108 +1,58 @@
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
+# Payday Loan POC - AI Development Guide
 
-- [x] Verify that the copilot-instructions.md file in the .github directory is created.
+## Architecture Overview
 
-- [x] Clarify Project Requirements
-<!-- Ask for project type, language, and frameworks if not specified. Skip if already provided. -->
+**Monorepo Structure (npm workspaces)**
 
-- [x] Scaffold the Project
-<!--
-Ensure that the previous step has been marked as completed.
-Call project setup tool with projectType parameter.
-Run scaffolding command to create project files and folders.
-Use '.' as the working directory.
-If no appropriate projectType is available, search documentation using available tools.
-Otherwise, create the project structure manually using available file creation tools.
--->
+- `apps/api`: NestJS REST API (port 3001, `/api` prefix)
+- `apps/web`: Next.js frontend (port 3000, App Router)
+- `packages/db`: Shared Prisma schema and client
 
-- [x] Customize the Project
-<!--
-Verify that all previous steps have been completed successfully and you have marked the step as completed.
-Develop a plan to modify codebase according to user requirements.
-Apply modifications using appropriate tools and user-provided references.
-Skip this step for "Hello World" projects.
--->
+**Data Flow**: Next.js → API (`/api/*`) → Prisma → PostgreSQL. Redis container exists but is not yet integrated.
 
-- [x] Install Required Extensions
-<!-- ONLY install extensions provided mentioned in the get_project_setup_info. Skip this step otherwise and mark as completed. -->
+**Phase 1 Scope**: Company onboarding (admin creates company with email domain) + user signup (email-only verification, no passwords yet).
 
-- [x] Compile the Project
-<!--
-Verify that all previous steps have been completed.
-Install any missing dependencies.
-Run diagnostics and resolve any issues.
-Check for markdown files in project folder for relevant instructions on how to do this.
--->
+## Database Schema (packages/db/prisma/schema.prisma)
 
-- [ ] Create and Run Task
-<!--
-Verify that all previous steps have been completed.
-Check https://code.visualstudio.com/docs/debugtest/tasks to determine if the project needs a task. If so, use the create_and_run_task to create and launch a task based on package.json, README.md, and project structure.
-Skip this step otherwise.
- -->
+Key entities: `Company` (with `emailDomain` unique constraint), `User`, `VerificationToken`, `AuditLog`. Every significant action logs to `AuditLog` with actor/action/metadata pattern (see [apps/api/src/audit/audit.service.ts](apps/api/src/audit/audit.service.ts)).
 
-- [ ] Launch the Project
-<!--
-Verify that all previous steps have been completed.
-Prompt user for debug mode, launch only if confirmed.
- -->
+**Domain Validation Pattern**: Use helper functions in [apps/api/src/common/validation.ts](apps/api/src/common/validation.ts) (`normalizeDomain`, `isValidDomain`, `getDomainFromEmail`) for consistent email domain handling.
 
-- [ ] Ensure Documentation is Complete
-<!--
-Verify that all previous steps have been completed.
-Verify that README.md and the copilot-instructions.md file in the .github directory exists and contains current project information.
-Clean up the copilot-instructions.md file in the .github directory by removing all HTML comments.
- -->
+## Development Workflow
 
-<!--
-## Execution Guidelines
-PROGRESS TRACKING:
-- If any tools are available to manage the above todo list, use it to track progress through this checklist.
-- After completing each step, mark it complete and add a summary.
-- Read current todo list status before starting each new step.
+**Setup Commands** (from repo root):
 
-COMMUNICATION RULES:
-- Avoid verbose explanations or printing full command outputs.
-- If a step is skipped, state that briefly (e.g. "No extensions needed").
-- Do not explain project structure unless asked.
-- Keep explanations concise and focused.
+```bash
+docker-compose up -d           # Start Postgres + Redis
+npm install                    # Install all workspace deps
+npm run prisma:generate        # Generate Prisma client
+npm run prisma:migrate         # Run migrations (packages/db)
+npm run dev:api                # Start API (apps/api)
+npm run dev:web                # Start Web (apps/web)
+```
 
-DEVELOPMENT RULES:
-- Use '.' as the working directory unless user specifies otherwise.
-- Avoid adding media or external links unless explicitly requested.
-- Use placeholders only with a note that they should be replaced.
-- Use VS Code API tool only for VS Code extension projects.
-- Once the project is created, it is already opened in Visual Studio Code—do not suggest commands to open this project in Visual Studio again.
-- If the project setup information has additional rules, follow them strictly.
+**Critical**: Always use root-level scripts (defined in [package.json](package.json)) which properly target workspaces with `-w` flag.
 
-FOLDER CREATION RULES:
-- Always use the current directory as the project root.
-- If you are running any terminal commands, use the '.' argument to ensure that the current working directory is used ALWAYS.
-- Do not create a new folder unless the user explicitly requests it besides a .vscode folder for a tasks.json file.
-- If any of the scaffolding commands mention that the folder name is not correct, let the user know to create a new folder with the correct name and then reopen it again in vscode.
+## Pre-commit Feedback Loops
 
-EXTENSION INSTALLATION RULES:
-- Only install extension specified by the get_project_setup_info tool. DO NOT INSTALL any other extensions.
+Husky runs these checks on every commit ([.husky/pre-commit](.husky/pre-commit)):
 
-PROJECT CONTENT RULES:
-- If the user has not specified project details, assume they want a "Hello World" project as a starting point.
-- Avoid adding links of any type (URLs, files, folders, etc.) or integrations that are not explicitly required.
-- Avoid generating images, videos, or any other media files unless explicitly requested.
-- If you need to use any media assets as placeholders, let the user know that these are placeholders and should be replaced with the actual assets later.
-- Ensure all generated components serve a clear purpose within the user's requested workflow.
-- If a feature is assumed but not confirmed, prompt the user for clarification before including it.
-- If you are working on a VS Code extension, use the VS Code API tool with a query to find relevant VS Code API references and samples related to that query.
+1. `lint-staged` (Prettier on all files via [.lintstagedrc](.lintstagedrc))
+2. `npm run typecheck` (TypeScript across API + web)
+3. `npm run test` (Vitest in API only)
 
-TASK COMPLETION RULES:
-- Your task is complete when:
-  - Project is successfully scaffolded and compiled without errors
-  - copilot-instructions.md file in the .github directory exists in the project
-  - README.md file exists and is up to date
-  - User is provided with clear instructions to debug/launch the project
+**Before committing code**: Ensure tests exist for business logic (see [apps/api/src/common/**tests**/validation.test.ts](apps/api/src/common/__tests__/validation.test.ts) pattern) and pass locally.
 
-Before starting a new task in the above plan, update progress in the plan.
--->
+## Key Conventions
 
-- Work through each checklist item systematically.
-- Keep communication concise and focused.
-- Follow development best practices.
+**DTOs**: Use `class-validator` decorators in `dto/*.dto.ts` files (e.g., [apps/api/src/auth/dto/signup.dto.ts](apps/api/src/auth/dto/signup.dto.ts)). NestJS global `ValidationPipe` with `whitelist: true` strips unknown properties.
+
+**Service Patterns**: Services must inject `PrismaService` and `AuditService`. Every user-facing action logs an audit entry with lowercase actor (user email) and PascalCase action (e.g., "UserSignedUp").
+
+**Verification Flow**: Signup creates 24-hour `VerificationToken` (hex string). Token verification updates `User.emailVerifiedAt` and `VerificationToken.verifiedAt` (single-use enforcement).
+
+**API Config**: Frontend fetches API base URL from `NEXT_PUBLIC_API_BASE_URL` or defaults to `http://localhost:3001` ([apps/web/app/lib/api.ts](apps/web/app/lib/api.ts)).
+
+## Testing Philosophy
+
+Per [docs/feedback-loops.md](docs/feedback-loops.md): TypeScript + tests + pre-commit hooks enable "AFK coding" by giving AI instant feedback. Prioritize unit tests for reusable logic (`common/validation.ts`) over integration tests.

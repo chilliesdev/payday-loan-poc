@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id          String     @id @default(cuid())
+  name        String
+  emailDomain String     @unique
+  paydayDay   Int
+  createdAt   DateTime   @default(now())
+  users       User[]
+  auditLogs   AuditLog[]
+}
+
+model User {
+  id               String              @id @default(cuid())
+  companyId        String
+  email            String              @unique
+  profile          Json?
+  emailVerifiedAt  DateTime?
+  createdAt        DateTime            @default(now())
+  company          Company             @relation(fields: [companyId], references: [id])
+  auditLogs        AuditLog[]
+  verificationTokens VerificationToken[]
+}
+
+model VerificationToken {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  verifiedAt DateTime?
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  companyId String?
+  userId    String?
+  company   Company? @relation(fields: [companyId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+}

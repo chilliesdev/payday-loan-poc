@@ -9,6 +9,7 @@ import { AuthService } from './auth/auth.service';
 import { AuditService } from './audit/audit.service';
 import { MonoModule } from './mono/mono.module';
 import { ScoringModule } from './scoring/scoring.module';
+import { FinancialModule } from './financial/financial.module';
 
 @Module({
   imports: [
@@ -17,7 +18,8 @@ import { ScoringModule } from './scoring/scoring.module';
       envFilePath: '../../.env'
     }),
     MonoModule,
-    ScoringModule
+    ScoringModule,
+    FinancialModule
   ],
   controllers: [HealthController, CompaniesController, AuthController],
   providers: [PrismaService, CompaniesService, AuthService, AuditService]

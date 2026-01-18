@@ -127,7 +127,7 @@
       "Create the API call to send the widget's returned code to the backend",
       "Build the UI states: Zero State (Connect), Loading (Analyzing), and Result (Show Limit)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "testing",
@@ -138,6 +138,6 @@
       "Script the flow: Navigate to Dashboard -> Click Connect -> Simulate Success -> Verify UI Update",
       "Check that the calculated limit appears correctly on the screen"
     ],
-    "passes": false
+    "passes": true
   }
 ]

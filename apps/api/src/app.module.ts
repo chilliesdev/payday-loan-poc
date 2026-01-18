@@ -8,6 +8,7 @@ import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
 import { AuditService } from './audit/audit.service';
 import { MonoModule } from './mono/mono.module';
+import { ScoringModule } from './scoring/scoring.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { MonoModule } from './mono/mono.module';
       isGlobal: true,
       envFilePath: '../../.env'
     }),
-    MonoModule
+    MonoModule,
+    ScoringModule
   ],
   controllers: [HealthController, CompaniesController, AuthController],
   providers: [PrismaService, CompaniesService, AuthService, AuditService]

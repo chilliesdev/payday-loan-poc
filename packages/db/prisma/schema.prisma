@@ -18,15 +18,18 @@ model Company {
 }
 
 model User {
-  id               String              @id @default(cuid())
-  companyId        String
-  email            String              @unique
-  profile          Json?
-  emailVerifiedAt  DateTime?
-  createdAt        DateTime            @default(now())
-  company          Company             @relation(fields: [companyId], references: [id])
-  auditLogs        AuditLog[]
+  id                 String              @id @default(cuid())
+  companyId          String
+  email              String              @unique
+  profile            Json?
+  emailVerifiedAt    DateTime?
+  monoAccountId      String?
+  maxLoanAmount      Int?
+  createdAt          DateTime            @default(now())
+  company            Company             @relation(fields: [companyId], references: [id])
+  auditLogs          AuditLog[]
   verificationTokens VerificationToken[]
+  financialSnapshots FinancialSnapshot[]
 }
 
 model VerificationToken {
@@ -49,4 +52,15 @@ model AuditLog {
   userId    String?
   company   Company? @relation(fields: [companyId], references: [id])
   user      User?    @relation(fields: [userId], references: [id])
+}
+
+model FinancialSnapshot {
+  id               String   @id @default(cuid())
+  userId           String
+  averageSalary    Int
+  paydayDetected   Boolean
+  expenseRatio     Float
+  rawStatementData Json
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id])
 }

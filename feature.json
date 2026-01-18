@@ -1,0 +1,143 @@
+[
+  {
+    "category": "database",
+    "description": "Initialize and migrate database schema for core entities",
+    "steps": [
+      "Define 'Company' model in schema.prisma with name, unique emailDomain, and paydayDay",
+      "Define 'User' model with relation to Company and unique email",
+      "Define 'VerificationToken' model with expiration logic",
+      "Define 'AuditLog' model for tracking system events",
+      "Run migration to create tables in PostgreSQL"
+    ],
+    "passes": true
+  },
+  {
+    "category": "backend-api",
+    "description": "Implement Company Onboarding API with validation",
+    "steps": [
+      "Create POST /api/companies endpoint",
+      "Implement validation for 'paydayDay' (must be 1-28)",
+      "Implement validation for 'emailDomain' (lowercase, valid format)",
+      "Ensure duplicate domains are rejected with ConflictException",
+      "Verify 'CompanyCreated' event is logged to AuditService"
+    ],
+    "passes": true
+  },
+  {
+    "category": "backend-api",
+    "description": "Implement User Signup logic with domain restriction",
+    "steps": [
+      "Create POST /api/auth/signup endpoint accepting user email",
+      "Extract domain from email and lookup against Company table",
+      "Reject signup if domain does not match any registered company",
+      "Create User record linked to the identified Company",
+      "Generate and store a 24-hour verification token"
+    ],
+    "passes": true
+  },
+  {
+    "category": "backend-api",
+    "description": "Implement Email Verification endpoint",
+    "steps": [
+      "Create GET /api/auth/verify endpoint accepting a token",
+      "Verify token exists and is not expired",
+      "Mark User as verified (update emailVerifiedAt)",
+      "Mark Token as used (update verifiedAt)",
+      "Log 'UserEmailVerified' event to AuditService"
+    ],
+    "passes": true
+  },
+  {
+    "category": "frontend-ui",
+    "description": "Build Admin Onboarding Interface",
+    "steps": [
+      "Create page at /admin/onboarding with form fields (Name, Domain, Payday)",
+      "Connect form submission to POST /api/companies",
+      "Display success message with created company details",
+      "Display specific error messages for invalid domains or existing companies"
+    ],
+    "passes": true
+  },
+  {
+    "category": "frontend-ui",
+    "description": "Build User Signup Interface",
+    "steps": [
+      "Create page at /signup with email input field",
+      "Connect form to POST /api/auth/signup",
+      "Display error if email domain is not recognized (Company not found)",
+      "Display the verification token in the UI (Dev Mode only) upon success"
+    ],
+    "passes": true
+  },
+  {
+    "category": "database",
+    "description": "Update Prisma schema with financial data models",
+    "steps": [
+      "Open packages/db/prisma/schema.prisma",
+      "Add optional 'monoAccountId' (String) and 'maxLoanAmount' (Int) fields to the User model",
+      "Define the new 'FinancialSnapshot' model with fields: id, userId, averageSalary, paydayDetected, expenseRatio, rawStatementData, and createdAt",
+      "Add the relation array 'financialSnapshots' to the User model",
+      "Run 'npm run prisma:migrate' to update the local database schema"
+    ],
+    "passes": true
+  },
+  {
+    "category": "backend",
+    "description": "Implement Mono Integration Service",
+    "steps": [
+      "Add MONO_SECRET_KEY and MONO_PUBLIC_KEY to .env and .env.example files",
+      "Create the file apps/api/src/integrations/mono.service.ts",
+      "Implement the 'exchangeToken(code: string)' method to call the Mono API",
+      "Implement the 'getStatement(accountId: string)' method to retrieve transaction history",
+      "Write unit tests mocking the Mono API responses to ensure error handling works"
+    ],
+    "passes": false
+  },
+  {
+    "category": "backend",
+    "description": "Build Heuristic AI Affordability Engine",
+    "steps": [
+      "Create apps/api/src/scoring/affordability.service.ts",
+      "Implement logic to parse transaction arrays and filter for credits over the last 3 months",
+      "Add salary detection logic checking for keywords (SALARY, PAYROLL) and date consistency",
+      "Implement the limit calculation: maxLoanAmount = Average Salary * 0.33",
+      "Create unit tests with sample JSON bank statements to verify the logic"
+    ],
+    "passes": false
+  },
+  {
+    "category": "backend",
+    "description": "Create Financial Controller and API Endpoints",
+    "steps": [
+      "Create apps/api/src/financial/financial.controller.ts",
+      "Define POST /api/financial/mono/exchange endpoint using a validation DTO",
+      "Wire the service flow: MonoService exchange -> MonoService statement -> AffordabilityService calculate -> PrismaService save",
+      "Add AuditService logging for actions 'FinancialDataLinked' and 'LoanLimitCalculated'",
+      "Define GET /api/users/me/limit endpoint to retrieve the stored limit"
+    ],
+    "passes": false
+  },
+  {
+    "category": "frontend",
+    "description": "Develop Dashboard with Mono Connect Integration",
+    "steps": [
+      "Create the dashboard page at apps/web/app/dashboard/page.tsx",
+      "Integrate the @mono.co/connect.js script",
+      "Implement the 'Connect Bank' button to trigger the Mono widget",
+      "Create the API call to send the widget's returned code to the backend",
+      "Build the UI states: Zero State (Connect), Loading (Analyzing), and Result (Show Limit)"
+    ],
+    "passes": false
+  },
+  {
+    "category": "testing",
+    "description": "Create End-to-End Test for Financial Flow",
+    "steps": [
+      "Create a new file playwriter-skills/test-financial-flow.md",
+      "Setup network interception to mock the Mono API response (since we can't use real bank credentials)",
+      "Script the flow: Navigate to Dashboard -> Click Connect -> Simulate Success -> Verify UI Update",
+      "Check that the calculated limit appears correctly on the screen"
+    ],
+    "passes": false
+  }
+]

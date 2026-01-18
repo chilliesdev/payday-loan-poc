@@ -115,7 +115,7 @@
       "Add AuditService logging for actions 'FinancialDataLinked' and 'LoanLimitCalculated'",
       "Define GET /api/users/me/limit endpoint to retrieve the stored limit"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "frontend",

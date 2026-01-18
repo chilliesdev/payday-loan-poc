@@ -2,57 +2,108 @@
 
 ## Architecture Overview
 
-**Monorepo Structure (npm workspaces)**
+**Monorepo** (npm workspaces): `apps/api` (NestJS, port 3001), `apps/web` (Next.js App Router, port 3000), `packages/db` (Prisma).
 
-- `apps/api`: NestJS REST API (port 3001, `/api` prefix)
-- `apps/web`: Next.js frontend (port 3000, App Router)
-- `packages/db`: Shared Prisma schema and client
+**Data Flow**: Next.js → API (`/api/*`) → Prisma → PostgreSQL. Redis container exists but is unused.
 
-**Data Flow**: Next.js → API (`/api/*`) → Prisma → PostgreSQL. Redis container exists but is not yet integrated.
+**Current Phase**: Company onboarding + user signup (email-only verification) + Mono bank integration for loan affordability scoring.
 
-**Phase 1 Scope**: Company onboarding (admin creates company with email domain) + user signup (email-only verification, no passwords yet).
+## Development Commands
 
-## Database Schema (packages/db/prisma/schema.prisma)
-
-Key entities: `Company` (with `emailDomain` unique constraint), `User`, `VerificationToken`, `AuditLog`. Every significant action logs to `AuditLog` with actor/action/metadata pattern (see [apps/api/src/audit/audit.service.ts](apps/api/src/audit/audit.service.ts)).
-
-**Domain Validation Pattern**: Use helper functions in [apps/api/src/common/validation.ts](apps/api/src/common/validation.ts) (`normalizeDomain`, `isValidDomain`, `getDomainFromEmail`) for consistent email domain handling.
-
-## Development Workflow
-
-**Setup Commands** (from repo root):
+**Always run from repo root** (uses `-w` flag internally):
 
 ```bash
-docker-compose up -d           # Start Postgres + Redis
-npm install                    # Install all workspace deps
-npm run prisma:generate        # Generate Prisma client
-npm run prisma:migrate         # Run migrations (packages/db)
-npm run dev:api                # Start API (apps/api)
-npm run dev:web                # Start Web (apps/web)
+docker-compose up -d        # Start Postgres + Redis
+npm run prisma:generate     # Generate Prisma client
+npm run prisma:migrate      # Run migrations
+npm run dev:api             # API at localhost:3001
+npm run dev:web             # Web at localhost:3000
+npm run test                # Vitest (API only)
+npm run typecheck           # TS check across workspaces
 ```
 
-**Critical**: Always use root-level scripts (defined in [package.json](package.json)) which properly target workspaces with `-w` flag.
+## Pre-commit Hooks (Husky)
 
-## Pre-commit Feedback Loops
+Every commit runs: `lint-staged` → `typecheck` → `test`. Ensure tests pass locally before committing.
 
-Husky runs these checks on every commit ([.husky/pre-commit](.husky/pre-commit)):
+## Service Patterns
 
-1. `lint-staged` (Prettier on all files via [.lintstagedrc](.lintstagedrc))
-2. `npm run typecheck` (TypeScript across API + web)
-3. `npm run test` (Vitest in API only)
+Services inject `PrismaService` and `AuditService`. **Every user-facing action must log an audit entry:**
 
-**Before committing code**: Ensure tests exist for business logic (see [apps/api/src/common/**tests**/validation.test.ts](apps/api/src/common/__tests__/validation.test.ts) pattern) and pass locally.
+```typescript
+await this.audit.log({
+  actor: email, // lowercase user email, or 'admin'/'system'
+  action: 'UserSignedUp', // PascalCase action name
+  userId: user.id,
+  companyId: company.id,
+  metadata: { email } // optional JSON context
+});
+```
 
-## Key Conventions
+See [apps/api/src/auth/auth.service.ts](apps/api/src/auth/auth.service.ts) and [apps/api/src/companies/companies.service.ts](apps/api/src/companies/companies.service.ts) for examples.
 
-**DTOs**: Use `class-validator` decorators in `dto/*.dto.ts` files (e.g., [apps/api/src/auth/dto/signup.dto.ts](apps/api/src/auth/dto/signup.dto.ts)). NestJS global `ValidationPipe` with `whitelist: true` strips unknown properties.
+## Module Structure
 
-**Service Patterns**: Services must inject `PrismaService` and `AuditService`. Every user-facing action logs an audit entry with lowercase actor (user email) and PascalCase action (e.g., "UserSignedUp").
+NestJS modules follow this pattern (see [apps/api/src/mono/mono.module.ts](apps/api/src/mono/mono.module.ts)):
 
-**Verification Flow**: Signup creates 24-hour `VerificationToken` (hex string). Token verification updates `User.emailVerifiedAt` and `VerificationToken.verifiedAt` (single-use enforcement).
+- Import `HttpModule` for external API calls
+- Declare service providers with `AuditService` and `PrismaService`
+- Export services for use by other modules
 
-**API Config**: Frontend fetches API base URL from `NEXT_PUBLIC_API_BASE_URL` or defaults to `http://localhost:3001` ([apps/web/app/lib/api.ts](apps/web/app/lib/api.ts)).
+Register modules in [apps/api/src/app.module.ts](apps/api/src/app.module.ts).
 
-## Testing Philosophy
+## Domain Validation
 
-Per [docs/feedback-loops.md](docs/feedback-loops.md): TypeScript + tests + pre-commit hooks enable "AFK coding" by giving AI instant feedback. Prioritize unit tests for reusable logic (`common/validation.ts`) over integration tests.
+Always use helpers from [apps/api/src/common/validation.ts](apps/api/src/common/validation.ts):
+
+- `normalizeDomain(domain)` - lowercase + trim
+- `isValidDomain(domain)` - format validation
+- `getDomainFromEmail(email)` - extract domain part
+- `isValidPaydayDay(day)` - must be 1-28
+
+## External Integrations
+
+**Mono API** ([apps/api/src/mono/mono.service.ts](apps/api/src/mono/mono.service.ts)): Bank account linking via `exchangeToken(code)` and statement retrieval via `getStatement(accountId)`. Requires `MONO_SECRET_KEY` env var.
+
+**Affordability Scoring** ([apps/api/src/scoring/affordability.service.ts](apps/api/src/scoring/affordability.service.ts)):
+
+- Filters transactions to last 3 months
+- Detects salary via keywords: `SALARY`, `PAYROLL`, `WAGES`, `PAY`
+- Calculates `maxLoanAmount = averageSalary × 0.33`
+- Detects payday pattern (±2 days tolerance)
+
+## Database Schema
+
+Key entities in [packages/db/prisma/schema.prisma](packages/db/prisma/schema.prisma):
+
+- `Company`: `emailDomain` (unique), `paydayDay` (1-28)
+- `User`: linked to Company by email domain, `monoAccountId`, `maxLoanAmount`
+- `VerificationToken`: 24-hour TTL, single-use (`verifiedAt` marks used)
+- `FinancialSnapshot`: stores affordability analysis results
+- `AuditLog`: actor/action/metadata pattern
+
+## Testing Conventions
+
+Unit tests in `__tests__/` folders using Vitest. See [apps/api/src/scoring/**tests**/affordability.service.test.ts](apps/api/src/scoring/__tests__/affordability.service.test.ts) for comprehensive patterns:
+
+- Helper factories for mock data (`createTransaction()`)
+- Group tests by behavior (`describe` blocks)
+- Test edge cases: empty input, boundary conditions, rounding
+
+## DTOs and Validation
+
+Use `class-validator` decorators in `dto/*.dto.ts`. NestJS `ValidationPipe` with `whitelist: true` strips unknown properties.
+
+## E2E Testing with Playwriter
+
+The [playwriter-skills/](playwriter-skills/) folder contains browser automation scripts for testing with AI agents:
+
+- [test-onboarding.md](playwriter-skills/test-onboarding.md) - Full onboarding flow (company creation → user signup)
+- [visual-testing.md](playwriter-skills/visual-testing.md) - Screenshot and accessibility snapshot capture
+- [api-monitor.md](playwriter-skills/api-monitor.md) - Network interception for API validation
+
+**Requires**: Both servers running (`npm run dev:api` + `npm run dev:web`) and Chrome with playwriter extension active.
+
+## Progress Tracking
+
+Check [feature.json](feature.json) for current implementation status. Features marked `"passes": false` are in progress.

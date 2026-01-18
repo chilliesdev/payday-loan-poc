@@ -91,7 +91,7 @@
       "Implement the 'getStatement(accountId: string)' method to retrieve transaction history",
       "Write unit tests mocking the Mono API responses to ensure error handling works"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
@@ -103,7 +103,7 @@
       "Implement the limit calculation: maxLoanAmount = Average Salary * 0.33",
       "Create unit tests with sample JSON bank statements to verify the logic"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "category": "backend",
